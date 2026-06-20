@@ -46,6 +46,13 @@ def load_model():
 
     return model
 
+# --------------------------
+# LOAD DATA AND MODEL
+# --------------------------
+
+df = load_data()
+model = load_model()
+
 # --------------------------------
 # Title
 # --------------------------------
