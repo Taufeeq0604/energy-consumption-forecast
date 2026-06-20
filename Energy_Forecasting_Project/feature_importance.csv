@@ -1,0 +1,13 @@
+Feature,Importance
+hour,0.026650608
+dayofweek,0.05078077
+month,0.013081452
+quarter,0.0
+year,0.004999809
+dayofyear,0.012776769
+rolling_30day,0.004779751
+lag24,0.63467014
+lag48,0.004553276
+lag168,0.18604016
+rolling24_mean,0.05116053
+rolling168_mean,0.010506829
