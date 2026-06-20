@@ -2,162 +2,374 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
-import os
 import plotly.express as px
 import plotly.graph_objects as go
+import os
 
-# --------------------------------
-# Page Config
-# --------------------------------
+# ------------------------------------------------
+# PAGE CONFIG
+# ------------------------------------------------
+
 st.set_page_config(
-    page_title="Hourly Energy Forecast",
+    page_title="Hourly Energy Consumption Forecasting",
     page_icon="⚡",
     layout="wide"
 )
 
-# --------------------------------
-# Load Data
-# --------------------------------
+# ------------------------------------------------
+# FILE PATHS
+# ------------------------------------------------
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATA_PATH = os.path.join(BASE_DIR, "PJMW_MW_Hourly.xlsx")
+METRICS_PATH = os.path.join(BASE_DIR, "metrics.pkl")
+PRED_PATH = os.path.join(BASE_DIR, "predictions.csv")
+IMPORTANCE_PATH = os.path.join(BASE_DIR, "feature_importance.csv")
+
+# ------------------------------------------------
+# LOAD DATA
+# ------------------------------------------------
+
 @st.cache_data
 def load_data():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(BASE_DIR, "PJMW_MW_Hourly.xlsx")
 
-    df = pd.read_excel(file_path)
-    df.columns = ["Datetime", "PJMW_MW"]
+    df = pd.read_excel(DATA_PATH)
 
     df["Datetime"] = pd.to_datetime(df["Datetime"])
-    df.set_index("Datetime", inplace=True)
+
+    df = df.sort_values("Datetime")
 
     return df
 
-# --------------------------------
-# Load Model
-# --------------------------------
-@st.cache_resource
-def load_model():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(BASE_DIR, "energy_model.pkl")
-
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-
-    return model
-
-
 df = load_data()
-model = load_model()
+
+# ------------------------------------------------
+# TITLE
+# ------------------------------------------------
 
 st.title("⚡ Hourly Energy Consumption Forecasting")
 
-st.sidebar.header("Forecast Settings")
+st.markdown("""
+This dashboard analyzes PJM Hourly Energy Consumption data
+and evaluates the performance of the XGBoost forecasting model.
+""")
 
-forecast_days = st.sidebar.slider(
-    "Forecast Horizon (Days)",
-    1,
-    30,
-    7
+# ------------------------------------------------
+# SIDEBAR
+# ------------------------------------------------
+
+st.sidebar.header("Project Information")
+
+st.sidebar.success("Model: XGBoost Regressor")
+
+st.sidebar.info("""
+Dataset:
+PJM Hourly Energy Consumption
+
+Target Variable:
+PJMW_MW
+""")
+
+# ------------------------------------------------
+# DATASET OVERVIEW
+# ------------------------------------------------
+
+st.header("📊 Dataset Overview")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "Total Records",
+    f"{len(df):,}"
 )
 
-# --------------------------------
-# Feature Engineering
-# --------------------------------
-df["hour"] = df.index.hour
-df["day"] = df.index.day
-df["month"] = df.index.month
-df["lag_1"] = df["PJMW_MW"].shift(1)
-df["lag_24"] = df["PJMW_MW"].shift(24)
-
-df = df.dropna()
-
-# --------------------------------
-# Forecast Dates
-# --------------------------------
-future_dates = pd.date_range(
-    start=df.index.max(),
-    periods=forecast_days * 24,
-    freq="h"
+col2.metric(
+    "Start Date",
+    str(df["Datetime"].min().date())
 )
 
-# --------------------------------
-# Recursive Forecasting
-# --------------------------------
-last_data = df.copy()
-forecast_list = []
-
-feature_order = model.get_booster().feature_names
-
-for i in range(len(future_dates)):
-
-    current_time = future_dates[i]
-
-    input_df = pd.DataFrame([{
-        "hour": current_time.hour,
-        "day": current_time.day,
-        "month": current_time.month,
-        "lag_1": float(last_data["PJMW_MW"].iloc[-1]),
-        "lag_24": float(last_data["PJMW_MW"].iloc[-24])
-    }])
-
-    # 🔥 FIX: ensure correct feature order
-    input_df = input_df[feature_order]
-
-    pred = model.predict(input_df)[0]
-    forecast_list.append(pred)
-
-    # update dataset
-    new_row = pd.DataFrame({"PJMW_MW": [pred]}, index=[current_time])
-    last_data = pd.concat([last_data, new_row])
-
-# --------------------------------
-# Forecast DataFrame
-# --------------------------------
-forecast_df = pd.DataFrame({
-    "Datetime": future_dates,
-    "Forecast_MW": forecast_list
-})
-
-# --------------------------------
-# Plot
-# --------------------------------
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(
-    x=df.index[-500:],
-    y=df["PJMW_MW"][-500:],
-    mode="lines",
-    name="Historical"
-))
-
-fig.add_trace(go.Scatter(
-    x=forecast_df["Datetime"],
-    y=forecast_df["Forecast_MW"],
-    mode="lines",
-    name="Forecast"
-))
-
-fig.update_layout(
-    title="Energy Forecast",
-    xaxis_title="Time",
-    yaxis_title="MW"
+col3.metric(
+    "End Date",
+    str(df["Datetime"].max().date())
 )
 
-st.plotly_chart(fig, use_container_width=True)
+st.dataframe(df.head())
 
-# --------------------------------
-# Output Table
-# --------------------------------
-st.subheader("Forecast Data")
-st.dataframe(forecast_df)
+# ------------------------------------------------
+# HISTORICAL TREND
+# ------------------------------------------------
 
-# --------------------------------
-# Download
-# --------------------------------
-csv = forecast_df.to_csv(index=False)
+st.header("📈 Historical Energy Consumption")
+
+fig = px.line(
+    df,
+    x="Datetime",
+    y="PJMW_MW",
+    title="Energy Consumption Over Time"
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# FEATURE ENGINEERING FOR EDA
+# ------------------------------------------------
+
+df["hour"] = df["Datetime"].dt.hour
+df["month"] = df["Datetime"].dt.month
+df["dayofweek"] = df["Datetime"].dt.day_name()
+
+# ------------------------------------------------
+# HOURLY TREND
+# ------------------------------------------------
+
+st.header("⏰ Hourly Consumption Pattern")
+
+hourly_avg = (
+    df.groupby("hour")["PJMW_MW"]
+    .mean()
+    .reset_index()
+)
+
+fig_hour = px.bar(
+    hourly_avg,
+    x="hour",
+    y="PJMW_MW",
+    title="Average Energy Consumption by Hour"
+)
+
+st.plotly_chart(
+    fig_hour,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# MONTHLY TREND
+# ------------------------------------------------
+
+st.header("📅 Monthly Consumption Pattern")
+
+monthly_avg = (
+    df.groupby("month")["PJMW_MW"]
+    .mean()
+    .reset_index()
+)
+
+fig_month = px.bar(
+    monthly_avg,
+    x="month",
+    y="PJMW_MW",
+    title="Average Energy Consumption by Month"
+)
+
+st.plotly_chart(
+    fig_month,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# DAY OF WEEK
+# ------------------------------------------------
+
+st.header("📆 Day Wise Consumption")
+
+day_avg = (
+    df.groupby("dayofweek")["PJMW_MW"]
+    .mean()
+    .reindex([
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+    ])
+    .reset_index()
+)
+
+fig_day = px.bar(
+    day_avg,
+    x="dayofweek",
+    y="PJMW_MW",
+    title="Average Consumption by Day"
+)
+
+st.plotly_chart(
+    fig_day,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# MODEL METRICS
+# ------------------------------------------------
+
+st.header("🎯 Model Performance")
+
+with open(METRICS_PATH, "rb") as f:
+    metrics = pickle.load(f)
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "MAE",
+    f"{metrics['MAE']:.2f}"
+)
+
+col2.metric(
+    "RMSE",
+    f"{metrics['RMSE']:.2f}"
+)
+
+col3.metric(
+    "R² Score",
+    f"{metrics['R2']:.4f}"
+)
+
+# ------------------------------------------------
+# ACTUAL VS PREDICTED
+# ------------------------------------------------
+
+st.header("📈 Actual vs Predicted")
+
+pred_df = pd.read_csv(PRED_PATH)
+
+fig_pred = go.Figure()
+
+fig_pred.add_trace(
+    go.Scatter(
+        y=pred_df["Actual"][:1000],
+        mode="lines",
+        name="Actual"
+    )
+)
+
+fig_pred.add_trace(
+    go.Scatter(
+        y=pred_df["Predicted"][:1000],
+        mode="lines",
+        name="Predicted"
+    )
+)
+
+fig_pred.update_layout(
+    title="Actual vs Predicted Values"
+)
+
+st.plotly_chart(
+    fig_pred,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# ERROR DISTRIBUTION
+# ------------------------------------------------
+
+st.header("📊 Prediction Error Distribution")
+
+pred_df["Error"] = (
+    pred_df["Actual"]
+    - pred_df["Predicted"]
+)
+
+fig_error = px.histogram(
+    pred_df,
+    x="Error",
+    nbins=50,
+    title="Prediction Error Distribution"
+)
+
+st.plotly_chart(
+    fig_error,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# FEATURE IMPORTANCE
+# ------------------------------------------------
+
+st.header("⭐ Feature Importance")
+
+importance_df = pd.read_csv(
+    IMPORTANCE_PATH
+)
+
+importance_df = importance_df.sort_values(
+    by="Importance",
+    ascending=True
+)
+
+fig_imp = px.bar(
+    importance_df,
+    x="Importance",
+    y="Feature",
+    orientation="h",
+    title="XGBoost Feature Importance"
+)
+
+st.plotly_chart(
+    fig_imp,
+    use_container_width=True
+)
+
+# ------------------------------------------------
+# TOP FEATURES
+# ------------------------------------------------
+
+st.subheader("Top Important Features")
+
+st.dataframe(
+    importance_df.sort_values(
+        by="Importance",
+        ascending=False
+    )
+)
+
+# ------------------------------------------------
+# DOWNLOAD PREDICTIONS
+# ------------------------------------------------
+
+st.header("⬇ Download Predictions")
+
+csv = pred_df.to_csv(index=False)
 
 st.download_button(
-    "⬇ Download Forecast",
-    csv,
-    "forecast.csv",
-    "text/csv"
+    label="Download Prediction Results",
+    data=csv,
+    file_name="prediction_results.csv",
+    mime="text/csv"
 )
+
+# ------------------------------------------------
+# PROJECT SUMMARY
+# ------------------------------------------------
+
+st.header("📌 Project Summary")
+
+st.success("""
+Model Used : XGBoost Regressor
+
+Features Used:
+• hour
+• dayofweek
+• month
+• quarter
+• year
+• dayofyear
+• rolling_30day
+• lag24
+• lag48
+• lag168
+• rolling24_mean
+• rolling168_mean
+
+Objective:
+Forecast hourly energy consumption using PJM energy data
+and identify seasonal, hourly and long-term demand patterns.
+""")
+
+st.markdown("---")
+st.markdown("Developed using Streamlit, XGBoost and PJM Energy Dataset")
