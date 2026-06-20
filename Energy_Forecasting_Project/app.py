@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import os
 import plotly.express as px
 import plotly.graph_objects as go
 
@@ -21,37 +22,52 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    try:
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(BASE_DIR, "PJMW_MW_Hourly.xlsx")
 
-    file_path = os.path.join(BASE_DIR, "PJMW_MW_Hourly.xlsx")
+        df = pd.read_excel(file_path)
 
-    df = pd.read_excel(file_path)
+        # Adjust column names if needed
+        df.columns = ["Datetime", "PJMW_MW"]
 
-    return df
+        df["Datetime"] = pd.to_datetime(df["Datetime"])
+        df.set_index("Datetime", inplace=True)
+
+        return df
+
+    except Exception as e:
+        st.error(f"Dataset Loading Error: {e}")
+        return pd.DataFrame()
 
 # --------------------------------
 # Load Model
 # --------------------------------
 
-import os
-
 @st.cache_resource
 def load_model():
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    try:
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(BASE_DIR, "energy_model.pkl")
 
-    model_path = os.path.join(BASE_DIR, "energy_model.pkl")
+        with open(model_path, "rb") as f:
+            model = pickle.load(f)
 
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
+        return model
 
-    return model
+    except Exception as e:
+        st.error(f"Model Loading Error: {e}")
+        return None
 
-# --------------------------
-# LOAD DATA AND MODEL
-# --------------------------
+# --------------------------------
+# Load Data & Model
+# --------------------------------
 
 df = load_data()
 model = load_model()
+
+if df.empty:
+    st.stop()
 
 # --------------------------------
 # Title
@@ -59,9 +75,12 @@ model = load_model()
 
 st.title("⚡ Hourly Energy Consumption Forecasting")
 
-st.markdown("""
-This dashboard analyzes PJM Hourly Energy Consumption and forecasts future electricity demand using Machine Learning.
-""")
+st.markdown(
+    """
+    This dashboard analyzes PJM Hourly Energy Consumption
+    and forecasts future electricity demand.
+    """
+)
 
 # --------------------------------
 # Sidebar
@@ -119,10 +138,7 @@ st.plotly_chart(fig, use_container_width=True)
 
 st.subheader("⏰ Average Consumption by Hour")
 
-hourly_avg = (
-    df.groupby(df.index.hour)["PJMW_MW"]
-    .mean()
-)
+hourly_avg = df.groupby(df.index.hour)["PJMW_MW"].mean()
 
 fig_hour = px.bar(
     x=hourly_avg.index,
@@ -141,10 +157,7 @@ st.plotly_chart(fig_hour, use_container_width=True)
 
 st.subheader("📅 Average Consumption by Month")
 
-monthly_avg = (
-    df.groupby(df.index.month)["PJMW_MW"]
-    .mean()
-)
+monthly_avg = df.groupby(df.index.month)["PJMW_MW"].mean()
 
 fig_month = px.bar(
     x=monthly_avg.index,
@@ -166,14 +179,12 @@ st.subheader("🔮 Energy Forecast")
 future_dates = pd.date_range(
     start=df.index.max(),
     periods=forecast_days * 24,
-    freq="H"
+    freq="h"
 )
 
-# Temporary Forecast Placeholder
-# Replace with actual XGBoost forecasting logic
-
+# Temporary forecast placeholder
 forecast_values = np.repeat(
-    df['PJMW_MW'].tail(24).mean(),
+    df["PJMW_MW"].tail(24).mean(),
     len(future_dates)
 )
 
@@ -191,18 +202,18 @@ fig_forecast = go.Figure()
 fig_forecast.add_trace(
     go.Scatter(
         x=df.index[-500:],
-        y=df['PJMW_MW'][-500:],
-        mode='lines',
-        name='Historical'
+        y=df["PJMW_MW"][-500:],
+        mode="lines",
+        name="Historical"
     )
 )
 
 fig_forecast.add_trace(
     go.Scatter(
-        x=forecast_df['Datetime'],
-        y=forecast_df['Forecast_MW'],
-        mode='lines',
-        name='Forecast'
+        x=forecast_df["Datetime"],
+        y=forecast_df["Forecast_MW"],
+        mode="lines",
+        name="Forecast"
     )
 )
 
@@ -212,10 +223,7 @@ fig_forecast.update_layout(
     yaxis_title="Energy Consumption (MW)"
 )
 
-st.plotly_chart(
-    fig_forecast,
-    use_container_width=True
-)
+st.plotly_chart(fig_forecast, use_container_width=True)
 
 # --------------------------------
 # Forecast Table
@@ -245,7 +253,5 @@ st.download_button(
 st.markdown("---")
 
 st.markdown(
-    """
-    Developed using **Streamlit**, **XGBoost**, and **PJM Energy Consumption Data**
-    """
+    "Developed using Streamlit, XGBoost and PJM Energy Data"
 )
