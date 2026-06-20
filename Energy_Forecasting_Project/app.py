@@ -21,30 +21,30 @@ st.set_page_config(
 
 @st.cache_data
 def load_data():
-    df = pd.read_excel("PJMW_MW_Hourly.xlsx")
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    df.columns = ['Datetime', 'PJMW_MW']
+    file_path = os.path.join(BASE_DIR, "PJMW_MW_Hourly.xlsx")
 
-    df['Datetime'] = pd.to_datetime(df['Datetime'])
-
-    df.set_index('Datetime', inplace=True)
+    df = pd.read_excel(file_path)
 
     return df
-
-df = load_data()
 
 # --------------------------------
 # Load Model
 # --------------------------------
 
+import os
+
 @st.cache_resource
 def load_model():
-    with open("energy_model.pkl", "rb") as f:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    model_path = os.path.join(BASE_DIR, "energy_model.pkl")
+
+    with open(model_path, "rb") as f:
         model = pickle.load(f)
 
     return model
-
-model = load_model()
 
 # --------------------------------
 # Title
