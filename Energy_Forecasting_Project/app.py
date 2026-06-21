@@ -327,6 +327,117 @@ st.dataframe(
         ascending=False
     )
 )
+# =====================================
+# FUTURE FORECAST USING XGBOOST
+# =====================================
+
+st.header("🔮 Future Energy Forecast")
+
+forecast_days = st.sidebar.slider(
+    "Forecast Days",
+    1,
+    30,
+    7
+)
+
+future_hours = forecast_days * 24
+
+history = df.copy()
+
+future_predictions = []
+
+last_time = pd.to_datetime(history["Datetime"].max())
+
+for i in range(future_hours):
+
+    future_time = last_time + pd.Timedelta(hours=1)
+
+    feature_row = pd.DataFrame({
+        'hour': [future_time.hour],
+        'dayofweek': [future_time.dayofweek],
+        'month': [future_time.month],
+        'quarter': [future_time.quarter],
+        'year': [future_time.year],
+        'dayofyear': [future_time.dayofyear],
+        'rolling_30day': [history['PJMW_MW'].tail(24*30).mean()],
+        'lag24': [history['PJMW_MW'].iloc[-24]],
+        'lag48': [history['PJMW_MW'].iloc[-48]],
+        'lag168': [history['PJMW_MW'].iloc[-168]],
+        'rolling24_mean': [history['PJMW_MW'].tail(24).mean()],
+        'rolling168_mean': [history['PJMW_MW'].tail(168).mean()]
+    })
+
+    feature_scaled = scaler.transform(feature_row)
+
+    pred = model.predict(feature_scaled)[0]
+
+    future_predictions.append(pred)
+
+    history = pd.concat([
+        history,
+        pd.DataFrame({
+            "Datetime": [future_time],
+            "PJMW_MW": [pred]
+        })
+    ], ignore_index=True)
+
+    last_time = future_time
+
+forecast_df = pd.DataFrame({
+    "Datetime": pd.date_range(
+        start=df["Datetime"].max() + pd.Timedelta(hours=1),
+        periods=future_hours,
+        freq="h"
+    ),
+    "Forecast_MW": future_predictions
+})
+
+fig_forecast = go.Figure()
+
+fig_forecast.add_trace(
+    go.Scatter(
+        x=df["Datetime"].tail(500),
+        y=df["PJMW_MW"].tail(500),
+        mode="lines",
+        name="Historical"
+    )
+)
+
+fig_forecast.add_trace(
+    go.Scatter(
+        x=forecast_df["Datetime"],
+        y=forecast_df["Forecast_MW"],
+        mode="lines",
+        name="Forecast"
+    )
+)
+
+fig_forecast.update_layout(
+    title=f"{forecast_days}-Day Energy Forecast",
+    xaxis_title="Date",
+    yaxis_title="Energy Consumption (MW)"
+)
+
+st.plotly_chart(
+    fig_forecast,
+    use_container_width=True
+)
+
+st.subheader("📋 Forecast Values")
+
+st.dataframe(
+    forecast_df,
+    use_container_width=True
+)
+
+csv = forecast_df.to_csv(index=False)
+
+st.download_button(
+    "⬇ Download Forecast CSV",
+    csv,
+    "future_forecast.csv",
+    "text/csv"
+)
 
 # ------------------------------------------------
 # DOWNLOAD PREDICTIONS
