@@ -64,6 +64,14 @@ def load_scaler():
 model = load_model()
 scaler = load_scaler()
 
+@st.cache_resource
+def load_metrics():
+    with open("metrics.pkl", "rb") as f:
+        metrics = pickle.load(f)
+    return metrics
+
+metrics = load_metrics()
+
 # ------------------------------------------------
 # TITLE
 # ------------------------------------------------
@@ -458,6 +466,37 @@ st.download_button(
     "future_forecast.csv",
     "text/csv"
 )
+
+# =====================================
+# MODEL EVALUATION METRICS
+# =====================================
+
+st.header("📊 Model Evaluation")
+
+col1, col2, col3 = st.columns(3)
+
+col1.metric(
+    "MAE",
+    f"{metrics['MAE']:.2f}"
+)
+
+col2.metric(
+    "RMSE",
+    f"{metrics['RMSE']:.2f}"
+)
+
+col3.metric(
+    "R² Score",
+    f"{metrics['R2']:.4f}"
+)
+
+st.info("""
+**MAE (Mean Absolute Error)** → Average prediction error.
+
+**RMSE (Root Mean Squared Error)** → Penalizes larger errors.
+
+**R² Score** → Measures how well the model explains the variance in energy consumption.
+""")
 
 # ------------------------------------------------
 # DOWNLOAD PREDICTIONS
