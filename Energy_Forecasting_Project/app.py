@@ -66,12 +66,20 @@ scaler = load_scaler()
 
 @st.cache_resource
 def load_metrics():
-    with open("metrics.pkl", "rb") as f:
+
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    metrics_path = os.path.join(
+        BASE_DIR,
+        "metrics.pkl"
+    )
+
+    with open(metrics_path, "rb") as f:
         metrics = pickle.load(f)
+
     return metrics
 
 metrics = load_metrics()
-
 # ------------------------------------------------
 # TITLE
 # ------------------------------------------------
