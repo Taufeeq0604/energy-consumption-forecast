@@ -45,6 +45,26 @@ def load_data():
 df = load_data()
 
 # ------------------------------------------------
+# LOAD MODEL
+# ------------------------------------------------
+
+MODEL_PATH = os.path.join(BASE_DIR, "energy_model.pkl")
+SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
+
+@st.cache_resource
+def load_model():
+    with open(MODEL_PATH, "rb") as f:
+        return pickle.load(f)
+
+@st.cache_resource
+def load_scaler():
+    with open(SCALER_PATH, "rb") as f:
+        return pickle.load(f)
+
+model = load_model()
+scaler = load_scaler()
+
+# ------------------------------------------------
 # TITLE
 # ------------------------------------------------
 
